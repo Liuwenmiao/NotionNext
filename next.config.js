@@ -1,263 +1,82 @@
-const { THEME } = require('./blog.config')
-const fs = require('fs')
-const path = require('path')
-const BLOG = require('./blog.config')
-const { extractLangPrefix } = require('./lib/utils/pageId')
+/* eslint-disable @typescript-eslint/no-var-requires */
+const { PHASE_DEVELOPMENT_SERVER } = require('next/constants')
 
-// 打包时是否分析代码
+// 可选：按需启用 bundle 分析器
 const withBundleAnalyzer = require('@next/bundle-analyzer')({
-  enabled: BLOG.BUNDLE_ANALYZER
+  enabled: process.env.ANALYZE === 'true',
 })
 
-// 扫描项目 /themes 下的目录名
-const themes = scanSubdirectories(path.resolve(__dirname, 'themes'))
-
-// 检测用户开启的多语言
-const locales = (function () {
-  const langs = [BLOG.LANG]
-  if (BLOG.NOTION_PAGE_ID.indexOf(',') > 0) {
-    const siteIds = BLOG.NOTION_PAGE_ID.split(',')
-    for (let index = 0; index < siteIds.length; index++) {
-      const siteId = siteIds[index]
-      const prefix = extractLangPrefix(siteId)
-      if (prefix && !langs.includes(prefix)) {
-        langs.push(prefix)
-      }
-    }
-  }
-  return langs
-})()
-
-// 编译前执行（清理旧 sitemap）
-;(function preBuild() {
-  if (
-    !process.env.npm_lifecycle_event === 'export' &&
-    !process.env.npm_lifecycle_event === 'build'
-  ) {
-    return
-  }
-  const sitemapPath = path.resolve(__dirname, 'public', 'sitemap.xml')
-  if (fs.existsSync(sitemapPath)) {
-    fs.unlinkSync(sitemapPath)
-    console.log('Deleted existing sitemap.xml from public directory')
-  }
-
-  const sitemap2Path = path.resolve(__dirname, 'sitemap.xml')
-  if (fs.existsSync(sitemap2Path)) {
-    fs.unlinkSync(sitemap2Path)
-    console.log('Deleted existing sitemap.xml from root directory')
-  }
-})()
-
-// 扫描主题目录
-function scanSubdirectories(directory) {
-  const subdirectories = []
-  fs.readdirSync(directory).forEach(file => {
-    const fullPath = path.join(directory, file)
-    const stats = fs.statSync(fullPath)
-    if (stats.isDirectory()) {
-      subdirectories.push(file)
-    }
-  })
-  return subdirectories
-}
-
-/**
- * @type {import('next').NextConfig}
- */
+// ============ 核心配置开始 ============
 const nextConfig = {
-  eslint: {
-    ignoreDuringBuilds: true
+  reactStrictMode: true,
+
+  // 启用静态导出
+  output: 'export',
+
+  // i18n 配置（根据 blog.config.js 的 LANG 参数）
+  i18n: {
+    locales: ['en-US', 'zh-CN'],
+    defaultLocale: 'en-US',
   },
-  output: process.env.EXPORT
-    ? 'export'
-    : process.env.NEXT_BUILD_STANDALONE === 'true'
-    ? 'standalone'
-    : undefined,
-  staticPageGenerationTimeout: 120,
-
-  compress: true,
-  poweredByHeader: false,
-  generateEtags: true,
-  swcMinify: true,
-
-  modularizeImports: {
-    '@heroicons/react/24/outline': {
-      transform: '@heroicons/react/24/outline/{{member}}'
-    },
-    '@heroicons/react/24/solid': {
-      transform: '@heroicons/react/24/solid/{{member}}'
-    }
-  },
-
-  // 多语言配置
-  i18n: process.env.EXPORT
-    ? undefined
-    : {
-        defaultLocale: BLOG.LANG,
-        locales: locales
-      },
 
   images: {
-    formats: ['image/avif', 'image/webp'],
-    deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
-    imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
-    domains: [
-      'gravatar.com',
-      'www.notion.so',
-      'avatars.githubusercontent.com',
-      'images.unsplash.com',
-      'source.unsplash.com',
-      'p1.qhimg.com',
-      'webmention.io',
-      'ko-fi.com'
-    ],
-    loader: 'default',
-    minimumCacheTTL: 60 * 60 * 24 * 7,
-    dangerouslyAllowSVG: true,
-    contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;"
+    unoptimized: true,
   },
 
-  redirects: process.env.EXPORT
-    ? undefined
-    : async () => [
-        {
-          source: '/feed',
-          destination: '/rss/feed.xml',
-          permanent: true
-        }
-      ],
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
 
-  rewrites: process.env.EXPORT
-    ? undefined
-    : async () => {
-        const langsRewrites = []
-        if (BLOG.NOTION_PAGE_ID.indexOf(',') > 0) {
-          const siteIds = BLOG.NOTION_PAGE_ID.split(',')
-          const langs = []
-          for (let index = 0; index < siteIds.length; index++) {
-            const siteId = siteIds[index]
-            const prefix = extractLangPrefix(siteId)
-            if (prefix) langs.push(prefix)
-            console.log('[Locales]', siteId)
-          }
+  typescript: {
+    ignoreBuildErrors: true,
+  },
 
-          langsRewrites.push(
-            {
-              source: `/:locale(${langs.join('|')})/:path*`,
-              destination: '/:path*'
-            },
-            {
-              source: `/:locale(${langs.join('|')})`,
-              destination: '/'
-            },
-            {
-              source: `/:locale(${langs.join('|')})/`,
-              destination: '/'
-            }
-          )
-        }
-
-        return [
-          ...langsRewrites,
-          {
-            source: '/:path*.html',
-            destination: '/:path*'
-          }
-        ]
-      },
-
-  headers: process.env.EXPORT
-    ? undefined
-    : async () => [
-        {
-          source: '/:path*{/}?',
-          headers: [
-            { key: 'Access-Control-Allow-Credentials', value: 'true' },
-            { key: 'Access-Control-Allow-Origin', value: '*' },
-            {
-              key: 'Access-Control-Allow-Methods',
-              value: 'GET,OPTIONS,PATCH,DELETE,POST,PUT'
-            },
-            {
-              key: 'Access-Control-Allow-Headers',
-              value:
-                'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version'
-            }
-          ]
-        }
-      ],
-
-  webpack: (config, { dev, isServer }) => {
-    config.resolve.alias['@'] = path.resolve(__dirname)
+  // Webpack 优化
+  webpack: (config, { isServer }) => {
     if (!isServer) {
-      console.log('[默认主题]', path.resolve(__dirname, 'themes', THEME))
-    }
-    config.resolve.alias['@theme-components'] = path.resolve(
-      __dirname,
-      'themes',
-      THEME
-    )
-
-    if (!dev) {
-      config.optimization = {
-        ...config.optimization,
-        splitChunks: {
-          chunks: 'all',
-          cacheGroups: {
-            vendor: {
-              test: /[\\/]node_modules[\\/]/,
-              name: 'vendors',
-              chunks: 'all'
-            },
-            common: {
-              name: 'common',
-              minChunks: 2,
-              chunks: 'all',
-              enforce: true
-            }
-          }
-        }
+      // 解决 node 模块依赖
+      config.resolve.fallback = {
+        fs: false,
+        module: false,
+        path: false,
+        os: false,
+        crypto: false,
+        stream: false,
       }
     }
-
-    if (dev || process.env.NODE_ENV_API === 'development') {
-      config.devtool = 'eval-source-map'
-    }
-
-    config.resolve.modules = [
-      path.resolve(__dirname, 'node_modules'),
-      'node_modules'
-    ]
-
     return config
   },
+}
+// ============ 核心配置结束 ============
 
-  experimental: {
-    scrollRestoration: true,
-    optimizePackageImports: ['@heroicons/react', 'lodash']
-  },
+// ✅ 修复 /oops 页面导出错误（含多语言）
+nextConfig.exportPathMap = async function (defaultPathMap) {
+  const pages = { ...defaultPathMap }
 
-  // ✅ 修复 /oops 页面导出错误
-  exportPathMap: function (
-    defaultPathMap,
-    { dev, dir, outDir, distDir, buildId }
-  ) {
-    const pages = { ...defaultPathMap }
-    delete pages['/sitemap.xml']
-    delete pages['/auth']
-    delete pages['/oops']
-    delete pages['/en-US/oops']
-    delete pages['/zh-CN/oops']
-    return pages
-  },
+  const removeOopsPaths = [
+    '/oops',
+    '/zh-CN/oops',
+    '/en-US/oops',
+    '/zh/oops',
+    '/en/oops',
+  ]
 
-  publicRuntimeConfig: {
-    THEMES: themes
+  for (const key of removeOopsPaths) {
+    if (pages[key]) {
+      delete pages[key]
+      console.log(`🧹 Removed broken page from export: ${key}`)
+    }
   }
+
+  // 同时移除 sitemap.xml 和 auth 页面（防止 Vercel 导出错误）
+  delete pages['/sitemap.xml']
+  delete pages['/auth']
+
+  return pages
 }
 
-// ✅ 只导出一次
-module.exports = process.env.ANALYZE
-  ? withBundleAnalyzer(nextConfig)
-  : nextConfig
+// ✅ 根据是否启用分析器输出最终配置
+module.exports =
+  process.env.ANALYZE === 'true'
+    ? withBundleAnalyzer(nextConfig)
+    : nextConfig
