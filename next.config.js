@@ -345,3 +345,18 @@ const nextConfig = {
 module.exports = process.env.ANALYZE
   ? withBundleAnalyzer(nextConfig)
   : nextConfig
+
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  reactStrictMode: false,
+
+  // ✅ 修复构建失败：跳过 /oops 页面导出
+  exportPathMap: async function (defaultPathMap) {
+    delete defaultPathMap['/oops']
+    delete defaultPathMap['/en-US/oops']
+    delete defaultPathMap['/zh-CN/oops']
+    return defaultPathMap
+  },
+}
+
+module.exports = nextConfig
